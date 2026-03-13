@@ -102,31 +102,36 @@ def get_stock_prices(stocks: list) -> list:
 def main_dashboard(date_str: str, df: pd.DataFrame) -> str:
     """Формирует итоговый JSON для главной страницы дашборда."""
 
-    # 1. ПРЕОБРАЗОВАНИЕ даты
-    df['Дата операции'] = pd.to_datetime(df['Дата операции'], dayfirst=True)
+    # Пытаемся распарсить дату гибко
+    try:
+        target_date = pd.to_datetime(date_str, dayfirst=True).to_pydatetime()
+    except Exception:
+        target_date = datetime.now()
 
-    # 2. Парсинг входной даты и определение границ месяца
-    target_date = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+    # Фильтруем данные за текущий месяц (от 1-го числа до target_date)
     start_month = target_date.replace(day=1, hour=0, minute=0, second=0)
 
-    # 3. Фильтрация данных за месяц (от 1-го числа до target_date)
-    mask = (df['Дата операции'] >= start_month) & (df['Дата операции'] <= target_date)
-    filtered_df = df.loc[mask].copy()
+    # Работаем с копией, чтобы не портить основной df
+    df_copy = df.copy()
+    df_copy['Дата операции'] = pd.to_datetime(df_copy['Дата операции'], dayfirst=True)
 
-    # 4. Информация по картам (расходы)
+    mask = (df_copy['Дата операции'] >= start_month) & (df_copy['Дата операции'] <= target_date)
+    filtered_df = df_copy.loc[mask]
+
+    # Исправляем логику по картам (безопасное приведение к строке)
     cards = []
     expenses = filtered_df[filtered_df['Сумма операции'] < 0]
-
-    # Группируем по картам, считаем общую сумму и кэшбэк
-    for card_number, group in expenses.groupby('Номер карты', dropna=True):
+    for card_number, group in expenses.groupby('Номер карты'):
         total_spent = abs(group['Сумма операции'].sum())
+        # Берем последние 4 цифры, если они есть
+        card_str = str(card_number).replace('*', '')[-4:] if pd.notna(card_number) else "Unknown"
         cards.append({
-            "last_digits": str(card_number).replace('*', ''),
+            "last_digits": card_str,
             "total_spent": round(total_spent, 2),
             "cashback": round(total_spent / 100, 2)
         })
 
-    # 5. Топ-5 транзакций по абсолютной сумме
+    #  Топ-5 транзакций по абсолютной сумме
     top_5_df = filtered_df[filtered_df['Сумма операции'] < 0] \
         .assign(abs_sum=filtered_df['Сумма операции'].abs()) \
         .sort_values(by='abs_sum', ascending=False) \

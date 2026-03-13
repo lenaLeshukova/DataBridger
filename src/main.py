@@ -1,28 +1,35 @@
 import os
 
-from utils import load_operations_from_excel
-from views import main_dashboard
-
-# Получаем путь к папке, где лежит этот файл (src)
-base_dir = os.path.dirname(os.path.abspath(__file__))
-# Поднимаемся на уровень выше в корень проекта и идем в data
-excel_path = os.path.join(base_dir, '..', 'data', 'operations.xlsx')
+from src.reports import spending_by_category
+from src.services import analyze_cashback_categories
+from src.utils import load_operations_from_excel
 
 
-def run():
-    # Загружаем данные, если папка data лежит в корне проекта, Python её не видит, поднимаемся на уровень выше.
+def main():
+    # 1. Настройка путей
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    excel_path = os.path.join(base_dir, '..', 'data', 'operations.xlsx')
+
+    # 2. Загрузка данных
+    print("Загрузка данных...")
     df = load_operations_from_excel(excel_path)
 
-    # Если df пустой или None, не идем дальше
-    if df is None or df.empty:
-        print("Критическая ошибка: Данные не загружены. Проверьте путь к файлу!")
-        return
+    # Преобразуем DataFrame в список словарей для модуля services
+    transactions_list = df.to_dict(orient='records')
 
-    # Передаем дату и DataFrame в основную функцию
-    json_response = main_dashboard("2021-12-31 16:44:00", df)
+    # 3. Работа с модулем SERVICES (Выгодные категории)
+    print("\n--- Анализ кешбэка за декабрь 2021 ---")
+    cashback_json = analyze_cashback_categories(transactions_list, 2021, 12)
+    print(cashback_json)
 
-    print(json_response)
+    # 4. Работа с модулем REPORTS (Траты по категории)
+    print("\n--- Генерация отчета по категории 'Супермаркеты' ---")
+    # Отчет автоматически сохранится в папку /reports благодаря декоратору
+    report_df = spending_by_category(df, "Супермаркеты", "31.12.2021")
+
+    print(f"Отчет сформирован. Найдено транзакций: {len(report_df)}")
+    print(report_df.head())
 
 
 if __name__ == "__main__":
-    run()
+    main()
